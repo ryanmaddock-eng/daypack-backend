@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pytz
+python-dateutil
+astral
+skyfield
+requests
+firebase-admin
