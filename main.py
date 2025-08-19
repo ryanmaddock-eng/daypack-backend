@@ -32,12 +32,21 @@ def sun_block(lat, lon, tzname, d: date):
     adusk = dusk(loc.observer, d, depression=18)
     sr = sunrise(loc.observer, d)
     ss = sunset(loc.observer, d)
-    return [
-        {"time_local": to_local(adawn, tzname), "label": "Astronomical dawn"},
-        {"time_local": to_local(sr, tzname),    "label": "Sunrise"},
-        {"time_local": to_local(ss, tzname),    "label": "Sunset"},
-        {"time_local": to_local(adusk, tzname), "label": "Astronomical dusk"},
-    ]
+
+    # Only keep events that actually happen on the requested local date
+    events = []
+    for dt_val, label in [
+        (adawn, "Astronomical dawn"),
+        (sr,    "Sunrise"),
+        (ss,    "Sunset"),
+        (adusk, "Astronomical dusk"),
+    ]:
+        local = dt_val.astimezone(tz.gettz(tzname))
+        if local.date() == d:
+            events.append({"time_local": local.isoformat(timespec="minutes"),
+                           "label": label})
+    return events
+
 
 def moon_block(lat, lon, tzname, d: date):
     # 36h window so events near midnight still show on the target date
