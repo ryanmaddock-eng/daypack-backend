@@ -115,26 +115,47 @@ def phases_perigee_apogee(tzname, d: date):
     return out
 
 def tides(lat, lon, tzname, d: date):
+    # If no key, just skip tides
     if not WORLDTIDES_KEY:
         return []
+
+    # Build the request
     start_ts = int(datetime(d.year, d.month, d.day, 0, 0, tzinfo=timezone.utc).timestamp())
     url = (
         "https://www.worldtides.info/api/v3"
         f"?extremes&lat={lat}&lon={lon}&start={start_ts}&length=1&key={WORLDTIDES_KEY}"
     )
-    r = requests.get(url, timeout=20)
-    r.raise_for_status()
-    data = r.json()
-    out = []
-    for e in data.get("extremes", []):
-        when_utc = datetime.fromtimestamp(e["dt"], tz=timezone.utc)
-        when_local = when_utc.astimezone(tz.gettz(tzname))
-        if when_local.date() == d:
-            label = f"{e['type'].title()} tide"
-            if e.get("height") is not None:
-                label += f" {e['height']:.2f} m"
-            out.append({"time_local": when_local.isoformat(timespec="minutes"), "label": label})
-    return out
+
+    try:
+        # Shorter timeouts + tiny retry so it doesn’t hang your whole request
+        data = None
+        for _ in range(2):  # up to 2 attempts
+            r = requests.get(url, timeout=(5, 10))  # (connect, read) seconds
+            if r.status_code == 200:
+                data = r.json()
+                break
+            # non-200 → stop trying; treat as no-tide-data
+            break
+
+        if not data:
+            return []
+
+        out = []
+        for e in data.get("extremes", []):
+            when_utc = datetime.fromtimestamp(e["dt"], tz=timezone.utc)
+            when_local = when_utc.astimezone(tz.gettz(tzname))
+            if when_local.date() == d:
+                label = f"{e['type'].title()} tide"
+                if e.get("height") is not None:
+                    label += f" {e['height']:.2f} m"
+                out.append({"time_local": when_local.isoformat(timespec="minutes"), "label": label})
+        return out
+
+    except Exception as exc:
+        # Log and carry on with no tides instead of crashing the endpoint
+        print(f"[tides] error: {exc}")
+        return []
+
 
 @app.get("/daypack")
 def daypack(
