@@ -46,14 +46,14 @@ def moon_block(lat, lon, tzname, d: date):
     t0 = TS.from_datetime(start_local.astimezone(timezone.utc))
     t1 = TS.from_datetime(end_local.astimezone(timezone.utc))
 
+    # Use lowercase keys and pass a Topos (lat/lon), not earth+topos
     topos = wgs84.latlon(lat, lon)
-    observer = EPH["Earth"] + topos
-    moon = EPH["Moon"]
+    moon = EPH["moon"]   # lowercase
 
     events = []
 
     # Moonrise / Moonset
-    f_rs = almanac.risings_and_settings(EPH, moon, observer)
+    f_rs = almanac.risings_and_settings(EPH, moon, topos)
     t_rs, y_rs = almanac.find_discrete(t0, t1, f_rs)
     for t, y in zip(t_rs, y_rs):
         local = t.utc_datetime().astimezone(tz.gettz(tzname))
@@ -63,15 +63,16 @@ def moon_block(lat, lon, tzname, d: date):
                 "label": "Moonrise" if y == 1 else "Moonset"
             })
 
-    # Meridian transits → label by altitude sign at transit time
-    t_transits = almanac.find_transits(observer, moon, t0, t1)
-    for t in t_transits:
-        dt_local = t.utc_datetime().astimezone(tz.gettz(tzname))
-        if dt_local.date() != d:
-            continue
-        alt, az, _ = (observer.at(t).observe(moon).apparent().altaz())
-        label = "Moon above" if alt.degrees > 0 else "Moon below"
-        events.append({"time_local": dt_local.isoformat(timespec="minutes"), "label": label})
+    # Meridian transits (upper/lower)
+    f_tr = almanac.meridian_transits(EPH, moon, topos)
+    t_tr, y_tr = almanac.find_discrete(t0, t1, f_tr)
+    for t, y in zip(t_tr, y_tr):
+        local = t.utc_datetime().astimezone(tz.gettz(tzname))
+        if local.date() == d:
+            events.append({
+                "time_local": local.isoformat(timespec="minutes"),
+                "label": "Moon above" if y == 1 else "Moon below"
+            })
 
     return events
 
